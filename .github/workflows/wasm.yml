@@ -56,7 +56,13 @@ jobs:
           cargo fmt -p mrubyedge-math --check
           cargo fmt -p mrubyedge-time --check
       - name: Run linter
-        run: cargo clippy -p mrubyedge --features "mruby-random,mruby-regexp"
+        run: |
+          set -e
+          cargo clippy -p mrubyedge --features "mruby-random,mruby-regexp"
+          cargo clippy -p mrubyedge-cli
+          cargo clippy -p mrubyedge-serde-json
+          cargo clippy -p mrubyedge-math
+          cargo clippy -p mrubyedge-time
       - name: Run tests
         run: |
           set -e
@@ -80,6 +86,10 @@ jobs:
           cargo build -p mrubyedge-time --profile release
       - name: Install wasm target
         run: rustup target add wasm32-wasip1
+      - name: Validate wasm inputs
+        run: |
+          test -f mrubyedge/benches/hello.rb
+          test -f mrubyedge/benches/hello.export.rbs
       - name: Build wasm artifact
         run: |
           mkdir -p dist

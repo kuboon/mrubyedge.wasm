@@ -1,0 +1,101 @@
+name: Generate wasm
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/wasm.yml
+      - Cargo.toml
+      - Cargo.lock
+      - mruby-math/**
+      - mruby-serde-json/**
+      - mruby-time/**
+      - mrubyedge/**
+      - mrubyedge-cli/**
+  pull_request:
+    branches:
+      - master
+    paths:
+      - .github/workflows/wasm.yml
+      - Cargo.toml
+      - Cargo.lock
+      - mruby-math/**
+      - mruby-serde-json/**
+      - mruby-time/**
+      - mrubyedge/**
+      - mrubyedge-cli/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-wasm:
+    runs-on: ubuntu-latest
+    env:
+      MRUBYEDGE_LOCAL_CRATE_PATH: ${{ github.workspace }}/mrubyedge
+    steps:
+      - uses: actions/checkout@v5
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install C compiler
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+      - name: Run formatter
+        run: |
+          set -e
+          cargo fmt -p mrubyedge --check
+          cargo fmt -p mrubyedge-cli --check
+          cargo fmt -p mrubyedge-serde-json --check
+          cargo fmt -p mrubyedge-math --check
+          cargo fmt -p mrubyedge-time --check
+      - name: Run linter
+        run: |
+          set -e
+          cargo clippy -p mrubyedge --features "mruby-random,mruby-regexp"
+          cargo clippy -p mrubyedge-cli
+          cargo clippy -p mrubyedge-serde-json
+          cargo clippy -p mrubyedge-math
+          cargo clippy -p mrubyedge-time
+      - name: Run tests
+        run: |
+          set -e
+          cargo test -p mrubyedge \
+            --features "mrubyedge-debug,mruby-random,mruby-regexp" \
+            --profile release
+          export MRUBYEDGE_INSN_LIMIT=10000
+          cargo test --features insn-limit --test insn_limit --profile release
+          cargo test -p mrubyedge-serde-json --profile release
+          cargo test -p mrubyedge-math --profile release
+          cargo test -p mrubyedge-time --profile release
+      - name: Run builds
+        run: |
+          set -e
+          cargo build -p mrubyedge \
+            --features "mrubyedge-debug,mruby-random,mruby-regexp" \
+            --profile release
+          cargo build -p mrubyedge-cli
+          cargo build -p mrubyedge-serde-json --profile release
+          cargo build -p mrubyedge-math --profile release
+          cargo build -p mrubyedge-time --profile release
+      - name: Install wasm target
+        run: rustup target add wasm32-wasip1
+      - name: Validate wasm inputs
+        run: |
+          test -f mrubyedge/benches/hello.rb
+          test -f mrubyedge/benches/hello.export.rbs
+      - name: Build wasm artifact
+        run: |
+          mkdir -p dist
+          cargo run -p mrubyedge-cli -- wasm mrubyedge/benches/hello.rb -o dist/hello.wasm --debug-mruby-edge
+      - name: Upload wasm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mrubyedge-wasm
+          path: dist/hello.wasm
